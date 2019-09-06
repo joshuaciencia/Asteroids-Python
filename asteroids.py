@@ -11,12 +11,10 @@ RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
 
-bullets = []
-asteroids = []
 clock = pygame.time.Clock()
 
 class Player:
-    def __init__(self, window):
+    def __init__(self, screen):
         self.pos = Vector2(WIDTH / 2, HEIGHT / 2)
         self.width = 12
         self.height = 20
@@ -33,7 +31,7 @@ class Player:
         self.left = Vector2()
         self.right = Vector2()
         self.front = Vector2()
-        self.window = window
+        self.screen = screen
 
     def update(self):
         self.get_input()
@@ -81,15 +79,15 @@ class Player:
         #draw player
 
         # draw left side
-        pygame.draw.line(self.window, WHITE,
+        pygame.draw.line(self.screen.window, WHITE,
                 (self.pos.x + self.left.x, self.pos.y + self.left.y),
                 (self.pos.x + self.front.x, self.pos.y + self.front.y), self.thickness)
         # draw right side
-        pygame.draw.line(self.window, WHITE,
+        pygame.draw.line(self.screen.window, WHITE,
                 (self.pos.x + self.front.x, self.pos.y + self.front.y),
                 (self.pos.x + self.right.x, self.pos.y + self.right.y), self.thickness)
         # draw back side
-        pygame.draw.line(self.window, WHITE,
+        pygame.draw.line(self.screen.window, WHITE,
                 (self.pos.x + self.right.x, self.pos.y + self.right.y),
                 (self.pos.x + self.left.x, self.pos.y + self.left.y), self.thickness)
 
@@ -109,12 +107,12 @@ class Player:
     def shoot(self):
         b_pos = self.pos + self.front
         b_vel = self.heading.normalize()
-        bullet = Bullet(b_pos, b_vel, self.window)
-        bullets.append(bullet)
+        bullet = Bullet(b_pos, b_vel, self.screen)
+        self.screen.add_bullet(bullet)
 
 class Bullet():
-    def __init__(self, pos, velocity, window):
-        self.window = window
+    def __init__(self, pos, velocity, screen):
+        self.screen = screen
         self.radius = 3
         self.speed = 20
         self.velocity = velocity
@@ -129,7 +127,7 @@ class Bullet():
         self.draw()
 
     def draw(self):
-        pygame.draw.circle(self.window, WHITE,
+        pygame.draw.circle(self.screen.window, WHITE,
                 (int(self.pos.x), int(self.pos.y)),
                 self.radius, self.thickness)
         
@@ -139,15 +137,15 @@ class Bullet():
              or self.pos.y > HEIGHT + self.radius
              or self.pos.y < -self.radius
            ):
-            bullets.remove(self)
+            self.screen.remove_bullet(self)
 
 class Asteroid:
-    def __init__(self, window):
+    def __init__(self, screen):
         self.pos = self.set_pos()
         self.vel = self.set_vel()
         self.radius = random.randrange(12, 30)
         self.points = self.get_shape()
-        self.window = window
+        self.screen = screen
         self.thickness = 2
 
     def set_pos(self):
@@ -185,7 +183,7 @@ class Asteroid:
             p += self.vel
 
     def draw(self):
-        pygame.draw.polygon(self.window, WHITE, self.points, 2)
+        pygame.draw.polygon(self.screen.window, WHITE, self.points, 2)
 
     def bounds(self):
         # move all points to origin
@@ -206,7 +204,6 @@ class Asteroid:
 
     def get_shape(self):
         p = []
-        print(self.radius)
         offset = 3
         for i in range(0, 361, 15):
             v = Vector2(1, 0)
@@ -216,7 +213,40 @@ class Asteroid:
             p.append(v)
 
         return p
+class Play_Screen:
+    def __init__(self, window, font):
+        self.window = window
+        self.font = font
+        self.score = 0
+        self.surface = font.render('Score: ' + str(self.score), True, WHITE)
+        self.rect = self.surface.get_rect()
+        self.rect.center = (700, 40)
+        self.player = Player(self)
+        self.wave = 1
+        self.pause = False
+        self.lives = 3
+        self.bullets = []
+        self.asteroids = []
+        self.init_wave()
 
+    def init_wave(self):
+        for i in range(self.wave + 2):
+            self.asteroids.append(Asteroid(self))
+
+    def update(self):
+        for asteroid in self.asteroids:
+            asteroid.update()
+        for bullet in self.bullets:
+            bullet.update()
+        self.player.update()
+        self.draw()
+    def draw(self):
+        self.window.blit(self.surface, self.rect)
+
+    def add_bullet(self, b):
+        self.bullets.append(b)
+    def remove_bullet(self, b):
+        self.bullets.remove(b)
 
 def main():
 
@@ -228,20 +258,17 @@ def main():
     window = pygame.display.set_mode((WIDTH, HEIGHT))
     # set window title
     pygame.display.set_caption('Holbi Game')
-    # create player
-    player = Player(window)
+    
+    font = pygame.font.Font('freesansbold.ttf', 32)
 
-    for i in range(3):
-        asteroids.append(Asteroid(window))
+    game_screen = Play_Screen(window, font)
 
     # main game loop
     while True:
         window.fill(BLACK)
-        player.update()
-        for bullet in bullets:
-            bullet.update()
-        for asteroid in asteroids:
-            asteroid.update()
+
+        game_screen.update()
+
         # handle events
         for event in pygame.event.get():
             if event.type == QUIT:
