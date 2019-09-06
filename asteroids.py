@@ -1,4 +1,4 @@
-import pygame, sys
+import pygame, sys, random
 from pygame.locals import *
 from pygame.math import Vector2
 
@@ -12,6 +12,7 @@ GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
 
 bullets = []
+asteroids = []
 clock = pygame.time.Clock()
 
 class Player:
@@ -77,8 +78,6 @@ class Player:
             self.pos.y = HEIGHT + self.height / 2
 
     def draw(self):
-        #clear window
-        self.window.fill(BLACK)
         #draw player
 
         # draw left side
@@ -113,7 +112,7 @@ class Player:
         bullet = Bullet(b_pos, b_vel, self.window)
         bullets.append(bullet)
 
-class Bullet:
+class Bullet():
     def __init__(self, pos, velocity, window):
         self.window = window
         self.radius = 3
@@ -122,6 +121,7 @@ class Bullet:
         self.velocity.x *= -1
         self.velocity.scale_to_length(self.speed)
         self.pos = pos
+        self.thickness = 1
 
     def update(self):
         self.pos += self.velocity
@@ -131,7 +131,7 @@ class Bullet:
     def draw(self):
         pygame.draw.circle(self.window, WHITE,
                 (int(self.pos.x), int(self.pos.y)),
-                self.radius)
+                self.radius, self.thickness)
         
     def bounds(self):
         if (     self.pos.x > WIDTH + self.radius 
@@ -141,7 +141,82 @@ class Bullet:
            ):
             bullets.remove(self)
 
-        
+class Asteroid:
+    def __init__(self, window):
+        self.pos = self.set_pos()
+        self.vel = self.set_vel()
+        self.radius = random.randrange(12, 30)
+        self.points = self.get_shape()
+        self.window = window
+        self.thickness = 2
+
+    def set_pos(self):
+        tmp = random.randrange(4)
+        offset = 100
+        p = Vector2()
+        if tmp == 0:
+            p.x = offset
+            p.y = random.randrange(0, HEIGHT)
+        elif tmp == 1:
+            p.x = random.randrange(0, WIDTH)
+            p.y = offset
+        elif tmp == 2:
+            p.x = WIDTH - offset
+            p.y = random.randrange(0, HEIGHT)
+        else:
+            p.x = random.randrange(0, WIDTH)
+            p.y = HEIGHT - offset
+        return p
+    
+    def set_vel(self):
+        v = Vector2(1, 0)
+        v = v.rotate(random.randrange(360))
+        v.scale_to_length(random.randrange(2, 5))
+        return v
+
+    def update(self):
+        self.pos += self.vel
+        self.update_points()
+        self.bounds()
+        self.draw()
+
+    def update_points(self):
+        for p in self.points:
+            p += self.vel
+
+    def draw(self):
+        pygame.draw.polygon(self.window, WHITE, self.points, 2)
+
+    def bounds(self):
+        # move all points to origin
+        for p in self.points:
+            p -= self.pos
+
+        if self.pos.x > WIDTH + self.radius:
+            self.pos.x = - self.radius
+        elif self.pos.x < -self.radius:
+            self.pos.x = WIDTH + self.radius
+        elif self.pos.y > HEIGHT + self.radius:
+            self.pos.y = -self.radius
+        elif self.pos.y < -self.radius:
+            self.pos.y = HEIGHT + self.radius
+        # move points back to position
+        for p in self.points:
+            p += self.pos
+
+    def get_shape(self):
+        p = []
+        print(self.radius)
+        offset = 3
+        for i in range(0, 361, 15):
+            v = Vector2(1, 0)
+            v = v.rotate(i)
+            v.scale_to_length(random.randrange(self.radius - offset, self.radius + offset))
+            v += self.pos
+            p.append(v)
+
+        return p
+
 
 def main():
 
@@ -155,11 +230,18 @@ def main():
     pygame.display.set_caption('Holbi Game')
     # create player
     player = Player(window)
+
+    for i in range(3):
+        asteroids.append(Asteroid(window))
+
     # main game loop
     while True:
+        window.fill(BLACK)
         player.update()
         for bullet in bullets:
             bullet.update()
+        for asteroid in asteroids:
+            asteroid.update()
         # handle events
         for event in pygame.event.get():
             if event.type == QUIT:
