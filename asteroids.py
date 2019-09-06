@@ -10,8 +10,7 @@ WHITE = (255, 255, 255)
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
-
-clock = pygame.time.Clock()
+GREY = (125, 125, 125)
 
 class Player:
     def __init__(self, screen):
@@ -22,8 +21,7 @@ class Player:
         self.speed = 8
         self.thickness = 2
         self.shoot_rate = 250
-        self.time = clock.get_time()
-        self.dt = 0
+        self.shoot_time = 0
         self.velocity = Vector2()
         self.heading = Vector2(0, -1)
         self.angle = 90
@@ -32,6 +30,9 @@ class Player:
         self.right = Vector2()
         self.front = Vector2()
         self.screen = screen
+        self.propulsion = False
+        self.par_rate = 80
+        self.par_time = 0
 
     def update(self):
         self.get_input()
@@ -78,6 +79,8 @@ class Player:
     def draw(self):
         #draw player
 
+        self.par_time += self.screen.clock.get_time()
+
         # draw left side
         pygame.draw.line(self.screen.window, WHITE,
                 (self.pos.x + self.left.x, self.pos.y + self.left.y),
@@ -90,25 +93,60 @@ class Player:
         pygame.draw.line(self.screen.window, WHITE,
                 (self.pos.x + self.right.x, self.pos.y + self.right.y),
                 (self.pos.x + self.left.x, self.pos.y + self.left.y), self.thickness)
+        # draw propulsion
+
+        if self.propulsion and self.par_time > self.par_rate:
+            pos = Vector2(self.pos)
+            pos -= self.front
+            par = Particle(pos, self.velocity, self.screen) 
+            self.screen.particles.append(par)
+            self.par_time = 0
 
     def get_input(self):
-        self.dt += clock.get_time()
+        self.shoot_time += self.screen.clock.get_time()
 
         if pygame.key.get_pressed()[K_w]:
             self.heading.scale_to_length(self.acc)
             self.velocity += self.heading
+            self.propulsion = True
+        else:
+            self.propulsion = False
         if pygame.key.get_pressed()[K_a]:
             self.heading = self.heading.rotate(self.delta_ang)
         if pygame.key.get_pressed()[K_d]:
             self.heading = self.heading.rotate(-self.delta_ang)
         if pygame.key.get_pressed()[K_SPACE] and self.dt > self.shoot_rate:
             self.shoot()
-            self.dt = 0
+            self.shoot_time = 0
     def shoot(self):
         b_pos = self.pos + self.front
         b_vel = self.heading.normalize()
         bullet = Bullet(b_pos, b_vel, self.screen)
         self.screen.add_bullet(bullet)
+
+class Particle:
+    def __init__(self, pos, vel, screen):
+        self.pos = pos
+        self.vel = vel.normalize()
+        self.vel.scale_to_length(-2) #slow motion to simulate Newton's third law
+        self.screen = screen
+        self.radius = 4
+        self.thickness = 1
+        self.life_time = 1500
+        self.time = 0
+
+    def update(self):
+        self.time += self.screen.clock.get_time()
+        if self.time > self.life_time:
+            self.screen.particles.remove(self)
+
+        self.pos += self.vel
+        self.draw()
+
+    def draw(self):
+        pygame.draw.circle(self.screen.window, GREY,
+                (int(self.pos.x), int(self.pos.y)), self.radius, self.thickness)
+
 
 class Bullet():
     def __init__(self, pos, velocity, screen):
@@ -140,12 +178,19 @@ class Bullet():
             self.screen.remove_bullet(self)
 
 class Asteroid:
-    def __init__(self, screen):
-        self.pos = self.set_pos()
-        self.vel = self.set_vel()
-        self.radius = random.randrange(12, 30)
+    def __init__(self, screen, big, pos):
+        if pos is None:
+           self.pos = self.set_pos()
+        else:
+            self.pos = pos
+        if big:
+            self.radius = random.randrange(25, 40)
+        else:
+            self.radius = random.randrange(10, 20)
+        self.big = big
         self.points = self.get_shape()
         self.screen = screen
+        self.vel = self.set_vel()
         self.thickness = 2
 
     def set_pos(self):
@@ -175,15 +220,35 @@ class Asteroid:
     def update(self):
         self.pos += self.vel
         self.update_points()
+        self.collision()
         self.bounds()
         self.draw()
-
     def update_points(self):
         for p in self.points:
             p += self.vel
 
+    def collision(self):
+        # test bullet collision
+        for b in self.screen.bullets:
+            # get distance to bullet
+            dist_to_b = (b.pos - self.pos).length()
+            # if dist is less than both radius -> collision
+            if dist_to_b < b.radius + self.radius:
+                self.screen.bullets.remove(b)
+                self.divide_asteroid()
+                
+    def divide_asteroid(self):
+        if self.big:
+            for i in range(4):
+                self.screen.asteroids.append(Asteroid(self.screen, False, Vector2(self.pos)))
+        self.screen.asteroids.remove(self)
+        self.screen.add_score(20)
+
     def draw(self):
-        pygame.draw.polygon(self.screen.window, WHITE, self.points, 2)
+        # draw collider
+        #pygame.draw.circle(self.screen.window, RED,
+        #        (int(self.pos.x), int(self.pos.y)), self.radius, 2)
+        pygame.draw.polygon(self.screen.window, RED, self.points, 2)
 
     def bounds(self):
         # move all points to origin
@@ -214,39 +279,60 @@ class Asteroid:
 
         return p
 class Play_Screen:
-    def __init__(self, window, font):
+    def __init__(self, window, font, clock):
         self.window = window
-        self.font = font
+        self.clock = clock
         self.score = 0
-        self.surface = font.render('Score: ' + str(self.score), True, WHITE)
-        self.rect = self.surface.get_rect()
-        self.rect.center = (700, 40)
+        self.score_text = Text(window, 'Score: ' + str(self.score), font, (700, 40))
         self.player = Player(self)
         self.wave = 1
         self.pause = False
         self.lives = 3
         self.bullets = []
         self.asteroids = []
+        self.particles = []
+        self.explosions = []
         self.init_wave()
 
     def init_wave(self):
         for i in range(self.wave + 2):
-            self.asteroids.append(Asteroid(self))
+            self.asteroids.append(Asteroid(self, True, None))
 
     def update(self):
         for asteroid in self.asteroids:
             asteroid.update()
         for bullet in self.bullets:
             bullet.update()
+        for particle in self.particles:
+            particle.update()
         self.player.update()
         self.draw()
     def draw(self):
-        self.window.blit(self.surface, self.rect)
-
+        self.score_text.draw()
+    def add_score(self, s):
+        self.score += s
+        self.score_text.text = 'Score: ' + str(self.score)
+        self.score_text.update_text()
     def add_bullet(self, b):
         self.bullets.append(b)
     def remove_bullet(self, b):
         self.bullets.remove(b)
+
+class Text:
+    def __init__(self, window, text, font, pos):
+        self.window = window
+        self.text = text
+        self.font = font
+        self.pos = pos
+        self.surface = None
+        self.rect = None
+        self.update_text()
+    def update_text(self):
+        self.surface = self.font.render(self.text, True, GREEN)
+        self.rect = self.surface.get_rect()
+        self.rect.center = self.pos
+    def draw(self):
+        self.window.blit(self.surface, self.rect)
 
 def main():
 
@@ -258,11 +344,12 @@ def main():
     window = pygame.display.set_mode((WIDTH, HEIGHT))
     # set window title
     pygame.display.set_caption('Holbi Game')
-    
+    # time handler
+    clock = pygame.time.Clock()
+    # global font
     font = pygame.font.Font('freesansbold.ttf', 32)
-
-    game_screen = Play_Screen(window, font)
-
+    #play screen
+    game_screen = Play_Screen(window, font, clock)
     # main game loop
     while True:
         window.fill(BLACK)
