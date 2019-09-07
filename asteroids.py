@@ -115,7 +115,7 @@ class Player:
             self.heading = self.heading.rotate(self.delta_ang)
         if pygame.key.get_pressed()[K_d]:
             self.heading = self.heading.rotate(-self.delta_ang)
-        if pygame.key.get_pressed()[K_SPACE] and self.dt > self.shoot_rate:
+        if pygame.key.get_pressed()[K_SPACE] and self.shoot_time > self.shoot_rate:
             self.shoot()
             self.shoot_time = 0
     def shoot(self):
