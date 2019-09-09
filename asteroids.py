@@ -11,6 +11,7 @@ RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
 GREY = (125, 125, 125)
+YELLOW = (255, 225, 0)
 
 class Player:
     def __init__(self, screen):
@@ -98,7 +99,10 @@ class Player:
         if self.propulsion and self.par_time > self.par_rate:
             pos = Vector2(self.pos)
             pos -= self.front
-            par = Particle(pos, self.velocity, self.screen) 
+            vel = Vector2(self.heading)
+            vel = vel.normalize()
+            vel.scale_to_length(-2)
+            par = Particle(pos, vel, 4, 1, 1500, GREY, self.screen) 
             self.screen.particles.append(par)
             self.par_time = 0
 
@@ -125,14 +129,14 @@ class Player:
         self.screen.add_bullet(bullet)
 
 class Particle:
-    def __init__(self, pos, vel, screen):
+    def __init__(self, pos, vel, r, t, lt, color, screen):
         self.pos = pos
-        self.vel = vel.normalize()
-        self.vel.scale_to_length(-2) #slow motion to simulate Newton's third law
+        self.vel = vel
         self.screen = screen
-        self.radius = 4
-        self.thickness = 1
-        self.life_time = 1500
+        self.radius = r
+        self.thickness = t
+        self.life_time = lt
+        self.color = color
         self.time = 0
 
     def update(self):
@@ -144,9 +148,8 @@ class Particle:
         self.draw()
 
     def draw(self):
-        pygame.draw.circle(self.screen.window, GREY,
+        pygame.draw.circle(self.screen.window, self.color,
                 (int(self.pos.x), int(self.pos.y)), self.radius, self.thickness)
-
 
 class Bullet():
     def __init__(self, pos, velocity, screen):
@@ -236,6 +239,7 @@ class Asteroid:
             if dist_to_b < b.radius + self.radius:
                 self.screen.bullets.remove(b)
                 self.divide_asteroid()
+                self.screen.create_explosion(self.pos)
                 
     def divide_asteroid(self):
         if self.big:
@@ -276,8 +280,8 @@ class Asteroid:
             v.scale_to_length(random.randrange(self.radius - offset, self.radius + offset))
             v += self.pos
             p.append(v)
-
         return p
+
 class Play_Screen:
     def __init__(self, window, font, clock):
         self.window = window
@@ -317,6 +321,15 @@ class Play_Screen:
         self.bullets.append(b)
     def remove_bullet(self, b):
         self.bullets.remove(b)
+    def create_explosion(self, pos):
+        parts = 15
+        step = int(360 / parts)
+        for i in range(0, 361, step):
+            vel = Vector2(1, 0)
+            vel = vel.rotate(i)
+            vel.scale_to_length(5)
+            p = Particle(Vector2(pos), vel, 4, 0, 250, YELLOW, self)
+            self.particles.append(p)
 
 class Text:
     def __init__(self, window, text, font, pos):
