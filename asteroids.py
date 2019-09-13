@@ -18,8 +18,8 @@ class Player:
         self.pos = Vector2(WIDTH / 2, HEIGHT / 2)
         self.width = 12
         self.height = 20
-        self.acc = 0.3
-        self.speed = 8
+        self.acc = 0.5
+        self.speed = 9
         self.thickness = 2
         self.shoot_rate = 250
         self.shoot_time = 0
@@ -41,7 +41,7 @@ class Player:
         self.rotate()
         self.bounds()
         self.draw()
-    
+
     def move(self):
         self.limit_speed()
         self.pos.x -= self.velocity.x
@@ -76,6 +76,7 @@ class Player:
             self.pos.y = -self.height / 2
         elif self.pos.y < -self.height / 2:
             self.pos.y = HEIGHT + self.height / 2
+    def collision(self):
 
     def draw(self):
         #draw player
@@ -102,7 +103,7 @@ class Player:
             vel = Vector2(self.heading)
             vel = vel.normalize()
             vel.scale_to_length(-2)
-            par = Particle(pos, vel, 4, 1, 1500, GREY, self.screen) 
+            par = Particle(pos, vel, 4, 1, 1500, GREY, self.screen)
             self.screen.particles.append(par)
             self.par_time = 0
 
@@ -113,19 +114,22 @@ class Player:
             self.heading.scale_to_length(self.acc)
             self.velocity += self.heading
             self.propulsion = True
+            pygame.mixer.Channel(1).play(self.screen.thrust, -1)
         else:
             self.propulsion = False
+            self.screen.thrust.stop()
         if pygame.key.get_pressed()[K_a]:
             self.heading = self.heading.rotate(self.delta_ang)
         if pygame.key.get_pressed()[K_d]:
             self.heading = self.heading.rotate(-self.delta_ang)
         if pygame.key.get_pressed()[K_SPACE] and self.shoot_time > self.shoot_rate:
-            self.shoot()
             self.shoot_time = 0
+            self.shoot()
     def shoot(self):
         b_pos = self.pos + self.front
         b_vel = self.heading.normalize()
         bullet = Bullet(b_pos, b_vel, self.screen)
+        pygame.mixer.Channel(0).play(self.screen.fire)
         self.screen.add_bullet(bullet)
 
 class Particle:
@@ -171,9 +175,9 @@ class Bullet():
         pygame.draw.circle(self.screen.window, WHITE,
                 (int(self.pos.x), int(self.pos.y)),
                 self.radius, self.thickness)
-        
+
     def bounds(self):
-        if (     self.pos.x > WIDTH + self.radius 
+        if (     self.pos.x > WIDTH + self.radius
              or self.pos.x < -self.radius
              or self.pos.y > HEIGHT + self.radius
              or self.pos.y < -self.radius
@@ -213,7 +217,7 @@ class Asteroid:
             p.x = random.randrange(0, WIDTH)
             p.y = HEIGHT - offset
         return p
-    
+
     def set_vel(self):
         v = Vector2(1, 0)
         v = v.rotate(random.randrange(360))
@@ -237,10 +241,11 @@ class Asteroid:
             dist_to_b = (b.pos - self.pos).length()
             # if dist is less than both radius -> collision
             if dist_to_b < b.radius + self.radius:
+                pygame.mixer.Channel(2).play(self.screen.exp)
                 self.screen.bullets.remove(b)
                 self.divide_asteroid()
                 self.screen.create_explosion(self.pos)
-                
+
     def divide_asteroid(self):
         if self.big:
             for i in range(4):
@@ -286,12 +291,20 @@ class Play_Screen:
     def __init__(self, window, font, clock):
         self.window = window
         self.clock = clock
+        self.fire = pygame.mixer.Sound('sounds/fire.wav')
+        self.thrust = pygame.mixer.Sound('sounds/thrust.wav')
+        self.exp = pygame.mixer.Sound('sounds/exp.wav')
+        self.thrust.set_volume(0.5)
+        self.fire.set_volume(0.5)
+        self.exp.set_volume(0.5)
+        self.wave = 1
         self.score = 0
         self.score_text = Text(window, 'Score: ' + str(self.score), font, (700, 40))
+        self.wave_text = Text(window, 'Wave ' + str(self.wave), font, (WIDTH / 2, 100))
+        self.game_over_text = Text(window, 'Game Over[SPACE]', font, (WIDTH / 2, 100))
+        self.draw_wave = True
+        self.draw_wave_time = 0
         self.player = Player(self)
-        self.wave = 1
-        self.pause = False
-        self.lives = 3
         self.bullets = []
         self.asteroids = []
         self.particles = []
@@ -299,12 +312,26 @@ class Play_Screen:
         self.init_wave()
 
     def init_wave(self):
-        for i in range(self.wave + 2):
+        self.player.pos.update(WIDTH / 2, HEIGHT / 2)
+        self.wave_text.text = 'Wave ' + str(self.wave)
+        self.wave_text.update_text()
+        self.draw_wave = True
+        self. game_over = False
+        self.wave += 1
+        for i in range(self.wave):
             self.asteroids.append(Asteroid(self, True, None))
+    def game_over(self):
+        self.wave = 1
+        self.score = 0
+        self.asteroids.clear()
+        self.game_over = True
+
 
     def update(self):
         for asteroid in self.asteroids:
             asteroid.update()
+            if len(self.asteroids) == 0:
+                self.init_wave()
         for bullet in self.bullets:
             bullet.update()
         for particle in self.particles:
@@ -312,7 +339,16 @@ class Play_Screen:
         self.player.update()
         self.draw()
     def draw(self):
+        if self.draw_wave:
+            self.draw_wave_time += self.clock.get_time()
+        if self.draw_wave_time > 2000:
+            self.draw_wave = False
+            self.draw_wave_time = 0
         self.score_text.draw()
+        if self.draw_wave:
+            self.wave_text.draw()
+        if self.game_over:
+            self.game_over_text.draw()
     def add_score(self, s):
         self.score += s
         self.score_text.text = 'Score: ' + str(self.score)
@@ -356,7 +392,7 @@ def main():
     # create a surface object (like a canvas)
     window = pygame.display.set_mode((WIDTH, HEIGHT))
     # set window title
-    pygame.display.set_caption('Holbi Game')
+    pygame.display.set_caption('Blasteroids By Joshua Ciencia')
     # time handler
     clock = pygame.time.Clock()
     # global font
@@ -366,7 +402,6 @@ def main():
     # main game loop
     while True:
         window.fill(BLACK)
-
         game_screen.update()
 
         # handle events
@@ -374,6 +409,9 @@ def main():
             if event.type == QUIT:
                 pygame.quit()
                 sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if game_screen.game_over:
+                    game_screen.init_wave()
         # draw the surface obj to the screen
         pygame.display.update()
         # wait for the next iteration
@@ -381,4 +419,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
