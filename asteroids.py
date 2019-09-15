@@ -36,9 +36,12 @@ class Player:
         self.par_time = 0
 
     def update(self):
+        if self.screen.draw_wave or self.screen.game_over:
+            return
         self.get_input()
         self.move()
         self.rotate()
+        self.collision()
         self.bounds()
         self.draw()
 
@@ -77,6 +80,17 @@ class Player:
         elif self.pos.y < -self.height / 2:
             self.pos.y = HEIGHT + self.height / 2
     def collision(self):
+        f = self.pos + self.front
+        l = self.pos + self.left
+        r = self.pos + self.right
+
+        for a in self.screen.asteroids:
+            front_to_a = (a.pos - f).length()
+            left_to_a = (a.pos - l).length()
+            right_to_a = (a.pos - r).length()
+            if front_to_a < a.radius or left_to_a < a.radius or right_to_a < a.radius:
+                pygame.mixer.Channel(3).play(self.screen.exp)
+                self.screen.game_end()
 
     def draw(self):
         #draw player
@@ -225,10 +239,11 @@ class Asteroid:
         return v
 
     def update(self):
-        self.pos += self.vel
-        self.update_points()
-        self.collision()
-        self.bounds()
+        if not self.screen.draw_wave:
+            self.pos += self.vel
+            self.update_points()
+            self.collision()
+            self.bounds()
         self.draw()
     def update_points(self):
         for p in self.points:
@@ -301,7 +316,7 @@ class Play_Screen:
         self.score = 0
         self.score_text = Text(window, 'Score: ' + str(self.score), font, (700, 40))
         self.wave_text = Text(window, 'Wave ' + str(self.wave), font, (WIDTH / 2, 100))
-        self.game_over_text = Text(window, 'Game Over[SPACE]', font, (WIDTH / 2, 100))
+        self.game_over_text = Text(window, 'Game Over', font, (WIDTH / 2, 100))
         self.draw_wave = True
         self.draw_wave_time = 0
         self.player = Player(self)
@@ -313,17 +328,22 @@ class Play_Screen:
 
     def init_wave(self):
         self.player.pos.update(WIDTH / 2, HEIGHT / 2)
+        self.player.velocity = Vector2()
+        self.player.angle = 90
+        self.player.heading = Vector2(0, -1)
         self.wave_text.text = 'Wave ' + str(self.wave)
         self.wave_text.update_text()
         self.draw_wave = True
-        self. game_over = False
+        self.game_over = False
         self.wave += 1
         for i in range(self.wave):
             self.asteroids.append(Asteroid(self, True, None))
-    def game_over(self):
+    def game_end(self):
         self.wave = 1
         self.score = 0
         self.asteroids.clear()
+        self.particles.clear()
+        self.thrust.stop()
         self.game_over = True
 
 
